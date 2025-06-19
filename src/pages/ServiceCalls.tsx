@@ -162,6 +162,11 @@ export const ServiceCalls = () => {
       
       const callData = {
         ...formData,
+        // Convert empty strings to null for UUID fields
+        client_id: formData.client_id || null,
+        engineer_id: formData.engineer_id || null,
+        scheduled_date: formData.scheduled_date || null,
+        problem_description: formData.problem_description || null,
         received_by: user?.id,
         status: 'pending'
       };
