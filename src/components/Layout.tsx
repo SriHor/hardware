@@ -10,7 +10,9 @@ import {
   BarChart3, 
   LogOut,
   Menu,
-  X
+  X,
+  FileText,
+  Bell
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -30,10 +32,12 @@ export const Layout = ({ children }: LayoutProps) => {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Clients', href: '/clients', icon: Users },
+    { name: 'Agreements', href: '/agreements', icon: FileText },
     { name: 'Service Calls', href: '/service-calls', icon: Headphones },
     { name: 'Staff', href: '/staff', icon: UserCog },
     { name: 'Inventory', href: '/inventory', icon: Package },
     { name: 'Telecalling', href: '/telecalling', icon: Phone },
+    { name: 'Reminders', href: '/reminders', icon: Bell },
     { name: 'Reports', href: '/reports', icon: BarChart3 },
   ];
 
