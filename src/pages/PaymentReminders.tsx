@@ -3,14 +3,15 @@ import { supabase } from '../App';
 import { 
   Bell, 
   Calendar, 
-  DollarSign, 
+  IndianRupee, 
   AlertTriangle, 
   CheckCircle,
   Clock,
   Filter,
-  Search
+  Search,
+  Send
 } from 'lucide-react';
-import { format, isAfter, isBefore, addDays } from 'date-fns';
+import { format, isAfter, isBefore, addDays, differenceInDays } from 'date-fns';
 
 interface PaymentSchedule {
   id: string;
@@ -160,6 +161,10 @@ export const PaymentReminders = () => {
     return isBefore(new Date(dueDate), new Date()) && new Date(dueDate).toDateString() !== new Date().toDateString();
   };
 
+  const getDaysUntilDue = (dueDate: string) => {
+    return differenceInDays(new Date(dueDate), new Date());
+  };
+
   const filteredPayments = paymentSchedules.filter(schedule => {
     const matchesSearch = 
       schedule.client_agreements?.clients?.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -191,6 +196,29 @@ export const PaymentReminders = () => {
     nextYear.setFullYear(nextYear.getFullYear() + 1);
     return isUpcoming(nextYear.toISOString());
   });
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2
+    }).format(amount);
+  };
+
+  const getFrequencyDisplay = (frequency: string) => {
+    switch (frequency) {
+      case 'half_yearly':
+        return 'Half Yearly';
+      case 'quarterly':
+        return 'Quarterly';
+      case 'monthly':
+        return 'Monthly';
+      case 'full':
+        return 'Full Payment';
+      default:
+        return frequency;
+    }
+  };
 
   if (loading) {
     return (
@@ -260,10 +288,10 @@ export const PaymentReminders = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Total Due Amount</p>
               <p className="text-2xl font-bold text-green-600">
-                ${upcomingPayments.reduce((sum, payment) => sum + payment.amount, 0).toFixed(2)}
+                {formatCurrency(upcomingPayments.reduce((sum, payment) => sum + payment.amount, 0))}
               </p>
             </div>
-            <DollarSign className="h-8 w-8 text-green-600" />
+            <IndianRupee className="h-8 w-8 text-green-600" />
           </div>
         </div>
       </div>
@@ -331,69 +359,97 @@ export const PaymentReminders = () => {
         <div className="p-6">
           {activeTab === 'payments' ? (
             <div className="space-y-4">
-              {filteredPayments.map((schedule) => (
-                <div key={schedule.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        {getPaymentStatusIcon(schedule.status)}
-                        <div>
-                          <h3 className="font-semibold text-gray-900">
-                            {schedule.client_agreements?.clients?.company_name}
-                          </h3>
-                          <p className="text-sm text-gray-600">
-                            Contact: {schedule.client_agreements?.clients?.contact_person}
-                          </p>
+              {filteredPayments.map((schedule) => {
+                const daysUntilDue = getDaysUntilDue(schedule.due_date);
+                const isUrgent = daysUntilDue <= 3 && daysUntilDue >= 0;
+                const isOverduePayment = isOverdue(schedule.due_date);
+                
+                return (
+                  <div key={schedule.id} className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${
+                    isOverduePayment ? 'border-red-200 bg-red-50' : 
+                    isUrgent ? 'border-yellow-200 bg-yellow-50' : 
+                    'border-gray-200'
+                  }`}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-2">
+                          {getPaymentStatusIcon(schedule.status)}
+                          <div>
+                            <h3 className="font-semibold text-gray-900">
+                              {schedule.client_agreements?.clients?.company_name}
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                              Contact: {schedule.client_agreements?.clients?.contact_person}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-500">Due Date:</span>
-                          <p className="font-medium">{format(new Date(schedule.due_date), 'MMM d, yyyy')}</p>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                          <div>
+                            <span className="text-gray-500">Due Date:</span>
+                            <p className="font-medium">{format(new Date(schedule.due_date), 'dd/MM/yyyy')}</p>
+                            {daysUntilDue >= 0 && (
+                              <p className={`text-xs ${isUrgent ? 'text-yellow-600' : 'text-gray-500'}`}>
+                                {daysUntilDue === 0 ? 'Due Today' : `${daysUntilDue} days left`}
+                              </p>
+                            )}
+                            {isOverduePayment && (
+                              <p className="text-xs text-red-600">
+                                {Math.abs(daysUntilDue)} days overdue
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Amount:</span>
+                            <p className="font-medium">{formatCurrency(schedule.amount)}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Payment #:</span>
+                            <p className="font-medium">{schedule.payment_number}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Frequency:</span>
+                            <p className="font-medium">{getFrequencyDisplay(schedule.client_agreements?.payment_frequency || '')}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Agreement:</span>
+                            <p className="font-medium">{format(new Date(schedule.client_agreements?.agreement_date || ''), 'dd/MM/yyyy')}</p>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-gray-500">Amount:</span>
-                          <p className="font-medium">${schedule.amount.toFixed(2)}</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Payment #:</span>
-                          <p className="font-medium">{schedule.payment_number}</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Frequency:</span>
-                          <p className="font-medium">{schedule.client_agreements?.payment_frequency.replace('_', ' ')}</p>
-                        </div>
-                      </div>
 
-                      {schedule.client_agreements?.clients?.mobile_office && (
-                        <div className="mt-2 text-sm text-gray-600">
-                          Phone: {schedule.client_agreements.clients.mobile_office}
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex flex-col items-end space-y-2">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(schedule.status)}`}>
-                        {schedule.status}
-                      </span>
+                        {schedule.client_agreements?.clients?.mobile_office && (
+                          <div className="mt-2 text-sm text-gray-600">
+                            Phone: {schedule.client_agreements.clients.mobile_office}
+                          </div>
+                        )}
+                      </div>
                       
-                      {schedule.status === 'pending' && !schedule.reminder_sent && (
-                        <button
-                          onClick={() => markReminderSent(schedule.id)}
-                          className="text-xs bg-primary-100 text-primary-700 px-2 py-1 rounded hover:bg-primary-200 transition-colors"
-                        >
-                          Mark Reminder Sent
-                        </button>
-                      )}
-                      
-                      {schedule.reminder_sent && (
-                        <span className="text-xs text-green-600">✓ Reminder Sent</span>
-                      )}
+                      <div className="flex flex-col items-end space-y-2">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(schedule.status)}`}>
+                          {schedule.status}
+                        </span>
+                        
+                        {schedule.status === 'pending' && !schedule.reminder_sent && (
+                          <button
+                            onClick={() => markReminderSent(schedule.id)}
+                            className="text-xs bg-primary-100 text-primary-700 px-3 py-1 rounded-full hover:bg-primary-200 transition-colors flex items-center space-x-1"
+                          >
+                            <Send className="h-3 w-3" />
+                            <span>Send Reminder</span>
+                          </button>
+                        )}
+                        
+                        {schedule.reminder_sent && (
+                          <span className="text-xs text-green-600 flex items-center space-x-1">
+                            <CheckCircle className="h-3 w-3" />
+                            <span>Reminder Sent</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               
               {filteredPayments.length === 0 && (
                 <div className="text-center py-8">
@@ -407,6 +463,7 @@ export const PaymentReminders = () => {
               {filteredAgreements.map((agreement) => {
                 const nextRenewal = new Date(agreement.agreement_date);
                 nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
+                const daysUntilRenewal = differenceInDays(nextRenewal, new Date());
                 
                 return (
                   <div key={agreement.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -427,16 +484,16 @@ export const PaymentReminders = () => {
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                           <div>
                             <span className="text-gray-500">Agreement Date:</span>
-                            <p className="font-medium">{format(new Date(agreement.agreement_date), 'MMM d, yyyy')}</p>
+                            <p className="font-medium">{format(new Date(agreement.agreement_date), 'dd/MM/yyyy')}</p>
                           </div>
                           <div>
                             <span className="text-gray-500">Next Renewal:</span>
-                            <p className="font-medium">{format(nextRenewal, 'MMM d, yyyy')}</p>
+                            <p className="font-medium">{format(nextRenewal, 'dd/MM/yyyy')}</p>
                           </div>
                           <div>
                             <span className="text-gray-500">Days Until Renewal:</span>
                             <p className="font-medium">
-                              {Math.ceil((nextRenewal.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days
+                              {daysUntilRenewal > 0 ? `${daysUntilRenewal} days` : 'Overdue'}
                             </p>
                           </div>
                         </div>

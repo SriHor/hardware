@@ -8,7 +8,7 @@ import {
   Trash2, 
   Eye,
   Calendar,
-  DollarSign,
+  IndianRupee,
   Monitor,
   Laptop,
   Printer,
@@ -53,6 +53,12 @@ interface Client {
   contact_person: string;
 }
 
+interface PaymentPreview {
+  paymentNumber: number;
+  dueDate: string;
+  amount: number;
+}
+
 export const Agreements = () => {
   const [agreements, setAgreements] = useState<ClientAgreement[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -61,6 +67,7 @@ export const Agreements = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingAgreement, setEditingAgreement] = useState<ClientAgreement | null>(null);
+  const [paymentPreview, setPaymentPreview] = useState<PaymentPreview[]>([]);
   const [formData, setFormData] = useState({
     client_id: '',
     agreement_date: '',
@@ -84,6 +91,10 @@ export const Agreements = () => {
     fetchAgreements();
     fetchClients();
   }, []);
+
+  useEffect(() => {
+    updatePaymentPreview();
+  }, [formData.agreement_date, formData.payment_frequency, formData.systems, formData.system_rate, formData.laptops, formData.laptop_rate, formData.printers, formData.printer_rate, formData.servers, formData.server_rate, formData.networking_rate, formData.discount]);
 
   const fetchAgreements = async () => {
     try {
@@ -116,6 +127,79 @@ export const Agreements = () => {
     } catch (error) {
       console.error('Error fetching clients:', error);
     }
+  };
+
+  const calculateTotal = () => {
+    const subtotal = (formData.systems * formData.system_rate) +
+                    (formData.laptops * formData.laptop_rate) +
+                    (formData.printers * formData.printer_rate) +
+                    (formData.servers * formData.server_rate) +
+                    formData.networking_rate;
+    return subtotal - formData.discount;
+  };
+
+  const updatePaymentPreview = () => {
+    if (!formData.agreement_date || !formData.payment_frequency) {
+      setPaymentPreview([]);
+      return;
+    }
+
+    const totalAmount = calculateTotal();
+    if (totalAmount <= 0) {
+      setPaymentPreview([]);
+      return;
+    }
+
+    const agreementDate = new Date(formData.agreement_date);
+    const previews: PaymentPreview[] = [];
+
+    switch (formData.payment_frequency) {
+      case 'full':
+        previews.push({
+          paymentNumber: 1,
+          dueDate: format(agreementDate, 'dd/MM/yyyy'),
+          amount: totalAmount
+        });
+        break;
+
+      case 'half_yearly':
+        const halfAmount = totalAmount / 2;
+        previews.push({
+          paymentNumber: 1,
+          dueDate: format(agreementDate, 'dd/MM/yyyy'),
+          amount: halfAmount
+        });
+        previews.push({
+          paymentNumber: 2,
+          dueDate: format(addMonths(agreementDate, 6), 'dd/MM/yyyy'),
+          amount: halfAmount
+        });
+        break;
+
+      case 'quarterly':
+        const quarterAmount = totalAmount / 4;
+        for (let i = 0; i < 4; i++) {
+          previews.push({
+            paymentNumber: i + 1,
+            dueDate: format(addMonths(agreementDate, i * 3), 'dd/MM/yyyy'),
+            amount: quarterAmount
+          });
+        }
+        break;
+
+      case 'monthly':
+        const monthlyAmount = totalAmount / 12;
+        for (let i = 0; i < 12; i++) {
+          previews.push({
+            paymentNumber: i + 1,
+            dueDate: format(addMonths(agreementDate, i), 'dd/MM/yyyy'),
+            amount: monthlyAmount
+          });
+        }
+        break;
+    }
+
+    setPaymentPreview(previews);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -214,15 +298,7 @@ export const Agreements = () => {
     });
     setEditingAgreement(null);
     setShowAddModal(false);
-  };
-
-  const calculateTotal = () => {
-    const subtotal = (formData.systems * formData.system_rate) +
-                    (formData.laptops * formData.laptop_rate) +
-                    (formData.printers * formData.printer_rate) +
-                    (formData.servers * formData.server_rate) +
-                    formData.networking_rate;
-    return subtotal - formData.discount;
+    setPaymentPreview([]);
   };
 
   const getStatusColor = (status: string) => {
@@ -236,6 +312,14 @@ export const Agreements = () => {
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2
+    }).format(amount);
   };
 
   if (loading) {
@@ -360,11 +444,11 @@ export const Agreements = () => {
                   <div className="flex items-center space-x-6 text-sm text-gray-500">
                     <div className="flex items-center space-x-1">
                       <Calendar className="h-4 w-4" />
-                      <span>Agreement: {format(new Date(agreement.agreement_date), 'MMM d, yyyy')}</span>
+                      <span>Agreement: {format(new Date(agreement.agreement_date), 'dd/MM/yyyy')}</span>
                     </div>
                     <div className="flex items-center space-x-1">
-                      <DollarSign className="h-4 w-4" />
-                      <span>Total: ${agreement.total_cost.toFixed(2)}</span>
+                      <IndianRupee className="h-4 w-4" />
+                      <span>Total: {formatCurrency(agreement.total_cost)}</span>
                     </div>
                     <div className="flex items-center space-x-1">
                       <CreditCard className="h-4 w-4" />
@@ -425,7 +509,7 @@ export const Agreements = () => {
       {/* Add/Edit Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">
                 {editingAgreement ? 'Edit Agreement' : 'New Client Agreement'}
@@ -474,7 +558,7 @@ export const Agreements = () => {
               <div>
                 <h4 className="text-md font-medium text-gray-900 mb-4 flex items-center">
                   <Monitor className="h-5 w-5 mr-2" />
-                  Equipment Details
+                  Equipment Details (All amounts in INR)
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
@@ -493,7 +577,7 @@ export const Agreements = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          System Rate
+                          System Rate (₹)
                         </label>
                         <input
                           type="number"
@@ -521,7 +605,7 @@ export const Agreements = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Laptop Rate
+                          Laptop Rate (₹)
                         </label>
                         <input
                           type="number"
@@ -551,7 +635,7 @@ export const Agreements = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Printer Rate
+                          Printer Rate (₹)
                         </label>
                         <input
                           type="number"
@@ -579,7 +663,7 @@ export const Agreements = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Server Rate
+                          Server Rate (₹)
                         </label>
                         <input
                           type="number"
@@ -596,7 +680,7 @@ export const Agreements = () => {
 
                 <div className="mt-4">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Networking Rate
+                    Networking Rate (₹)
                   </label>
                   <input
                     type="number"
@@ -612,13 +696,13 @@ export const Agreements = () => {
               {/* Pricing */}
               <div>
                 <h4 className="text-md font-medium text-gray-900 mb-4 flex items-center">
-                  <DollarSign className="h-5 w-5 mr-2" />
+                  <IndianRupee className="h-5 w-5 mr-2" />
                   Pricing
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Discount
+                      Discount (₹)
                     </label>
                     <input
                       type="number"
@@ -634,7 +718,7 @@ export const Agreements = () => {
                       Total Cost
                     </label>
                     <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 font-medium">
-                      ${calculateTotal().toFixed(2)}
+                      {formatCurrency(calculateTotal())}
                     </div>
                   </div>
                 </div>
@@ -672,9 +756,9 @@ export const Agreements = () => {
                       onChange={(e) => setFormData({ ...formData, payment_frequency: e.target.value })}
                     >
                       <option value="full">Full Payment</option>
-                      <option value="half_yearly">Half Yearly</option>
-                      <option value="quarterly">Quarterly</option>
-                      <option value="monthly">Monthly</option>
+                      <option value="half_yearly">Half Yearly (50% each)</option>
+                      <option value="quarterly">Quarterly (25% each)</option>
+                      <option value="monthly">Monthly (Monthly installments)</option>
                     </select>
                   </div>
                   <div className="md:col-span-2">
@@ -691,6 +775,33 @@ export const Agreements = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Payment Preview */}
+              {paymentPreview.length > 0 && (
+                <div>
+                  <h4 className="text-md font-medium text-gray-900 mb-4 flex items-center">
+                    <Calendar className="h-5 w-5 mr-2" />
+                    Payment Schedule Preview
+                  </h4>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {paymentPreview.map((payment) => (
+                        <div key={payment.paymentNumber} className="bg-white p-3 rounded border">
+                          <div className="text-sm font-medium text-gray-900">
+                            Payment #{payment.paymentNumber}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            Due: {payment.dueDate}
+                          </div>
+                          <div className="text-sm font-semibold text-blue-600">
+                            {formatCurrency(payment.amount)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Other Details */}
               <div>
