@@ -15,7 +15,9 @@ import {
   Server,
   Network,
   CreditCard,
-  AlertTriangle
+  AlertTriangle,
+  Clock,
+  Bell
 } from 'lucide-react';
 import { format, addMonths, addDays } from 'date-fns';
 
@@ -57,6 +59,8 @@ interface PaymentPreview {
   paymentNumber: number;
   dueDate: string;
   amount: number;
+  reminderDate: string;
+  daysFromAgreement: number;
 }
 
 export const Agreements = () => {
@@ -158,7 +162,9 @@ export const Agreements = () => {
         previews.push({
           paymentNumber: 1,
           dueDate: format(agreementDate, 'dd/MM/yyyy'),
-          amount: totalAmount
+          amount: totalAmount,
+          reminderDate: format(addDays(agreementDate, -7), 'dd/MM/yyyy'),
+          daysFromAgreement: 0
         });
         break;
 
@@ -167,22 +173,30 @@ export const Agreements = () => {
         previews.push({
           paymentNumber: 1,
           dueDate: format(agreementDate, 'dd/MM/yyyy'),
-          amount: halfAmount
+          amount: halfAmount,
+          reminderDate: format(addDays(agreementDate, -7), 'dd/MM/yyyy'),
+          daysFromAgreement: 0
         });
+        const secondHalfDate = addMonths(agreementDate, 6);
         previews.push({
           paymentNumber: 2,
-          dueDate: format(addMonths(agreementDate, 6), 'dd/MM/yyyy'),
-          amount: halfAmount
+          dueDate: format(secondHalfDate, 'dd/MM/yyyy'),
+          amount: halfAmount,
+          reminderDate: format(addDays(secondHalfDate, -7), 'dd/MM/yyyy'),
+          daysFromAgreement: 180
         });
         break;
 
       case 'quarterly':
         const quarterAmount = totalAmount / 4;
         for (let i = 0; i < 4; i++) {
+          const quarterDate = addMonths(agreementDate, i * 3);
           previews.push({
             paymentNumber: i + 1,
-            dueDate: format(addMonths(agreementDate, i * 3), 'dd/MM/yyyy'),
-            amount: quarterAmount
+            dueDate: format(quarterDate, 'dd/MM/yyyy'),
+            amount: quarterAmount,
+            reminderDate: format(addDays(quarterDate, -7), 'dd/MM/yyyy'),
+            daysFromAgreement: i * 90
           });
         }
         break;
@@ -190,10 +204,13 @@ export const Agreements = () => {
       case 'three_times':
         const threeTimesAmount = totalAmount / 3;
         for (let i = 0; i < 3; i++) {
+          const threeTimesDate = addMonths(agreementDate, i * 4);
           previews.push({
             paymentNumber: i + 1,
-            dueDate: format(addMonths(agreementDate, i * 4), 'dd/MM/yyyy'),
-            amount: threeTimesAmount
+            dueDate: format(threeTimesDate, 'dd/MM/yyyy'),
+            amount: threeTimesAmount,
+            reminderDate: format(addDays(threeTimesDate, -7), 'dd/MM/yyyy'),
+            daysFromAgreement: i * 120
           });
         }
         break;
@@ -201,10 +218,13 @@ export const Agreements = () => {
       case 'monthly':
         const monthlyAmount = totalAmount / 12;
         for (let i = 0; i < 12; i++) {
+          const monthlyDate = addMonths(agreementDate, i);
           previews.push({
             paymentNumber: i + 1,
-            dueDate: format(addMonths(agreementDate, i), 'dd/MM/yyyy'),
-            amount: monthlyAmount
+            dueDate: format(monthlyDate, 'dd/MM/yyyy'),
+            amount: monthlyAmount,
+            reminderDate: format(addDays(monthlyDate, -7), 'dd/MM/yyyy'),
+            daysFromAgreement: i * 30
           });
         }
         break;
@@ -350,13 +370,21 @@ export const Agreements = () => {
     }
   };
 
-  // Get today's date in YYYY-MM-DD format for date input
-  const getTodayDate = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  const getPaymentSplit = (frequency: string, totalAmount: number) => {
+    switch (frequency) {
+      case 'half_yearly':
+        return `₹${(totalAmount / 2).toLocaleString('en-IN')} × 2 payments`;
+      case 'quarterly':
+        return `₹${(totalAmount / 4).toLocaleString('en-IN')} × 4 payments`;
+      case 'three_times':
+        return `₹${(totalAmount / 3).toLocaleString('en-IN')} × 3 payments`;
+      case 'monthly':
+        return `₹${(totalAmount / 12).toLocaleString('en-IN')} × 12 payments`;
+      case 'full':
+        return `₹${totalAmount.toLocaleString('en-IN')} × 1 payment`;
+      default:
+        return '';
+    }
   };
 
   if (loading) {
@@ -478,7 +506,7 @@ export const Agreements = () => {
                     )}
                   </div>
                   
-                  <div className="flex items-center space-x-6 text-sm text-gray-500">
+                  <div className="flex items-center space-x-6 text-sm text-gray-500 mb-2">
                     <div className="flex items-center space-x-1">
                       <Calendar className="h-4 w-4" />
                       <span>Agreement: {format(new Date(agreement.agreement_date), 'dd/MM/yyyy')}</span>
@@ -490,6 +518,17 @@ export const Agreements = () => {
                     <div className="flex items-center space-x-1">
                       <CreditCard className="h-4 w-4" />
                       <span>{getFrequencyDisplay(agreement.payment_frequency)}</span>
+                    </div>
+                  </div>
+
+                  {/* Payment Split Display */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+                    <div className="flex items-center space-x-2 text-sm">
+                      <IndianRupee className="h-4 w-4 text-blue-600" />
+                      <span className="font-medium text-blue-900">Payment Split:</span>
+                      <span className="text-blue-700">
+                        {getPaymentSplit(agreement.payment_frequency, agreement.total_cost)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -546,7 +585,7 @@ export const Agreements = () => {
       {/* Add/Edit Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-7xl w-full max-h-[95vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">
                 {editingAgreement ? 'Edit Agreement' : 'New Client Agreement'}
@@ -821,20 +860,46 @@ export const Agreements = () => {
                 <div>
                   <h4 className="text-md font-medium text-gray-900 mb-4 flex items-center">
                     <Calendar className="h-5 w-5 mr-2" />
-                    Payment Schedule Preview
+                    Payment Schedule & Reminder Preview
                   </h4>
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="mb-3">
+                      <p className="text-sm font-medium text-blue-900 mb-1">
+                        Payment Split: {getPaymentSplit(formData.payment_frequency, calculateTotal())}
+                      </p>
+                      <p className="text-xs text-blue-700">
+                        Reminders will be sent 7 days before each due date
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-h-60 overflow-y-auto">
                       {paymentPreview.map((payment) => (
-                        <div key={payment.paymentNumber} className="bg-white p-3 rounded border">
-                          <div className="text-sm font-medium text-gray-900">
+                        <div key={payment.paymentNumber} className="bg-white p-3 rounded border border-blue-200">
+                          <div className="text-sm font-medium text-gray-900 mb-1">
                             Payment #{payment.paymentNumber}
                           </div>
-                          <div className="text-sm text-gray-600">
-                            Due: {payment.dueDate}
-                          </div>
-                          <div className="text-sm font-semibold text-blue-600">
-                            {formatCurrency(payment.amount)}
+                          <div className="space-y-1 text-xs">
+                            <div className="flex items-center space-x-1">
+                              <Calendar className="h-3 w-3 text-green-600" />
+                              <span className="text-gray-600">Due: {payment.dueDate}</span>
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              <Bell className="h-3 w-3 text-yellow-600" />
+                              <span className="text-gray-600">Reminder: {payment.reminderDate}</span>
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              <IndianRupee className="h-3 w-3 text-blue-600" />
+                              <span className="font-semibold text-blue-700">
+                                {formatCurrency(payment.amount)}
+                              </span>
+                            </div>
+                            {payment.daysFromAgreement > 0 && (
+                              <div className="flex items-center space-x-1">
+                                <Clock className="h-3 w-3 text-gray-500" />
+                                <span className="text-gray-500">
+                                  {payment.daysFromAgreement} days from agreement
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
