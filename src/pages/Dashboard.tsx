@@ -24,7 +24,7 @@ interface DashboardStats {
 
 interface RecentCall {
   id: string;
-  issue: string;
+  nature_of_complaint: string;
   status: string;
   created_at: string;
   clients: {
@@ -98,7 +98,7 @@ export const Dashboard = () => {
         .from('service_calls')
         .select(`
           id,
-          issue,
+          nature_of_complaint,
           status,
           created_at,
           clients (company_name),
@@ -398,7 +398,7 @@ export const Dashboard = () => {
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 mt-1 line-clamp-2">
-                        {call.issue}
+                        {call.nature_of_complaint}
                       </p>
                       <div className="flex items-center justify-between mt-2">
                         <p className="text-xs text-gray-500">
