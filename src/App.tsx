@@ -4,10 +4,12 @@ import { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Clients } from './pages/Clients';
+import { Agreements } from './pages/Agreements';
 import { ServiceCalls } from './pages/ServiceCalls';
 import { Staff } from './pages/Staff';
 import { Inventory } from './pages/Inventory';
 import { Telecalling } from './pages/Telecalling';
+import { PaymentReminders } from './pages/PaymentReminders';
 import { Reports } from './pages/Reports';
 import { Login } from './pages/Login';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -40,10 +42,12 @@ function AppContent() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/clients" element={<Clients />} />
+            <Route path="/agreements" element={<Agreements />} />
             <Route path="/service-calls" element={<ServiceCalls />} />
             <Route path="/staff" element={<Staff />} />
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/telecalling" element={<Telecalling />} />
+            <Route path="/reminders" element={<PaymentReminders />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
