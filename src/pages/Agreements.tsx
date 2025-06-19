@@ -187,6 +187,17 @@ export const Agreements = () => {
         }
         break;
 
+      case 'three_times':
+        const threeTimesAmount = totalAmount / 3;
+        for (let i = 0; i < 3; i++) {
+          previews.push({
+            paymentNumber: i + 1,
+            dueDate: format(addMonths(agreementDate, i * 4), 'dd/MM/yyyy'),
+            amount: threeTimesAmount
+          });
+        }
+        break;
+
       case 'monthly':
         const monthlyAmount = totalAmount / 12;
         for (let i = 0; i < 12; i++) {
@@ -322,6 +333,32 @@ export const Agreements = () => {
     }).format(amount);
   };
 
+  const getFrequencyDisplay = (frequency: string) => {
+    switch (frequency) {
+      case 'half_yearly':
+        return 'Half Yearly';
+      case 'quarterly':
+        return 'Quarterly';
+      case 'three_times':
+        return 'Three Times a Year';
+      case 'monthly':
+        return 'Monthly';
+      case 'full':
+        return 'Full Payment';
+      default:
+        return frequency;
+    }
+  };
+
+  // Get today's date in YYYY-MM-DD format for date input
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -452,7 +489,7 @@ export const Agreements = () => {
                     </div>
                     <div className="flex items-center space-x-1">
                       <CreditCard className="h-4 w-4" />
-                      <span>{agreement.payment_frequency.replace('_', ' ')}</span>
+                      <span>{getFrequencyDisplay(agreement.payment_frequency)}</span>
                     </div>
                   </div>
                 </div>
@@ -546,6 +583,8 @@ export const Agreements = () => {
                     <input
                       type="date"
                       required
+                      min="2020-01-01"
+                      max="2030-12-31"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       value={formData.agreement_date}
                       onChange={(e) => setFormData({ ...formData, agreement_date: e.target.value })}
@@ -758,6 +797,7 @@ export const Agreements = () => {
                       <option value="full">Full Payment</option>
                       <option value="half_yearly">Half Yearly (50% each)</option>
                       <option value="quarterly">Quarterly (25% each)</option>
+                      <option value="three_times">Three Times a Year (33.33% each)</option>
                       <option value="monthly">Monthly (Monthly installments)</option>
                     </select>
                   </div>
