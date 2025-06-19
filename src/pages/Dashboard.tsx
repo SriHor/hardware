@@ -8,9 +8,12 @@ import {
   Clock,
   CheckCircle,
   AlertTriangle,
-  Calendar
+  Calendar,
+  IndianRupee,
+  Bell,
+  CreditCard
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, isSameMonth, differenceInDays } from 'date-fns';
 
 interface DashboardStats {
   totalClients: number;
@@ -32,6 +35,20 @@ interface RecentCall {
   } | null;
 }
 
+interface PaymentReminder {
+  id: string;
+  due_date: string;
+  amount: number;
+  payment_number: number;
+  status: string;
+  client_agreements: {
+    clients: {
+      company_name: string;
+      contact_person: string;
+    };
+  };
+}
+
 export const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats>({
     totalClients: 0,
@@ -40,6 +57,7 @@ export const Dashboard = () => {
     completedCallsThisMonth: 0
   });
   const [recentCalls, setRecentCalls] = useState<RecentCall[]>([]);
+  const [paymentReminders, setPaymentReminders] = useState<PaymentReminder[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -75,7 +93,7 @@ export const Dashboard = () => {
         .eq('status', 'completed')
         .gte('completed_at', startOfMonth.toISOString());
 
-      // Fetch recent service calls with explicit relationship specification
+      // Fetch recent service calls
       const { data: recentCallsData } = await supabase
         .from('service_calls')
         .select(`
@@ -89,6 +107,26 @@ export const Dashboard = () => {
         .order('created_at', { ascending: false })
         .limit(5);
 
+      // Fetch payment reminders for this month
+      const { data: paymentData } = await supabase
+        .from('payment_schedules')
+        .select(`
+          id,
+          due_date,
+          amount,
+          payment_number,
+          status,
+          client_agreements (
+            clients (
+              company_name,
+              contact_person
+            )
+          )
+        `)
+        .eq('status', 'pending')
+        .order('due_date', { ascending: true })
+        .limit(10);
+
       setStats({
         totalClients: clientCount || 0,
         activeServiceCalls: activeCallsCount || 0,
@@ -97,6 +135,7 @@ export const Dashboard = () => {
       });
 
       setRecentCalls(recentCallsData || []);
+      setPaymentReminders(paymentData || []);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -131,6 +170,28 @@ export const Dashboard = () => {
         return 'bg-gray-100 text-gray-800';
     }
   };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount);
+  };
+
+  const getDaysUntilDue = (dueDate: string) => {
+    return differenceInDays(new Date(dueDate), new Date());
+  };
+
+  const thisMonthPayments = paymentReminders.filter(payment => 
+    isSameMonth(new Date(payment.due_date), new Date())
+  );
+
+  const urgentPayments = paymentReminders.filter(payment => {
+    const days = getDaysUntilDue(payment.due_date);
+    return days <= 7 && days >= 0;
+  });
 
   if (loading) {
     return (
@@ -225,6 +286,87 @@ export const Dashboard = () => {
         </div>
       </div>
 
+      {/* Payment Alerts */}
+      {(thisMonthPayments.length > 0 || urgentPayments.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* This Month Payments */}
+          {thisMonthPayments.length > 0 && (
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-sm p-6 text-white">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-white bg-opacity-20 p-2 rounded-lg">
+                    <Calendar className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">This Month Due</h3>
+                    <p className="text-blue-100 text-sm">{thisMonthPayments.length} payments pending</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold">
+                    {formatCurrency(thisMonthPayments.reduce((sum, p) => sum + p.amount, 0))}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {thisMonthPayments.slice(0, 3).map((payment) => (
+                  <div key={payment.id} className="bg-white bg-opacity-10 rounded p-2 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span>{payment.client_agreements?.clients?.company_name}</span>
+                      <span className="font-medium">{formatCurrency(payment.amount)}</span>
+                    </div>
+                    <div className="text-blue-100 text-xs">
+                      Due: {format(new Date(payment.due_date), 'dd/MM/yyyy')}
+                    </div>
+                  </div>
+                ))}
+                {thisMonthPayments.length > 3 && (
+                  <p className="text-blue-100 text-xs text-center">
+                    +{thisMonthPayments.length - 3} more payments
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Urgent Payments */}
+          {urgentPayments.length > 0 && (
+            <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-xl shadow-sm p-6 text-white">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-white bg-opacity-20 p-2 rounded-lg">
+                    <Bell className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">Urgent Reminders</h3>
+                    <p className="text-red-100 text-sm">Due within 7 days</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold">{urgentPayments.length}</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {urgentPayments.slice(0, 3).map((payment) => {
+                  const days = getDaysUntilDue(payment.due_date);
+                  return (
+                    <div key={payment.id} className="bg-white bg-opacity-10 rounded p-2 text-sm">
+                      <div className="flex justify-between items-center">
+                        <span>{payment.client_agreements?.clients?.company_name}</span>
+                        <span className="font-medium">{formatCurrency(payment.amount)}</span>
+                      </div>
+                      <div className="text-red-100 text-xs">
+                        {days === 0 ? 'Due Today' : `${days} days left`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Recent Service Calls */}
@@ -295,8 +437,8 @@ export const Dashboard = () => {
                 <span className="text-sm font-medium text-purple-900">Manage Inventory</span>
               </button>
               <button className="flex flex-col items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors group">
-                <TrendingUp className="h-8 w-8 text-green-600 mb-2 group-hover:scale-110 transition-transform" />
-                <span className="text-sm font-medium text-green-900">View Reports</span>
+                <CreditCard className="h-8 w-8 text-green-600 mb-2 group-hover:scale-110 transition-transform" />
+                <span className="text-sm font-medium text-green-900">Payment Reminders</span>
               </button>
             </div>
           </div>
