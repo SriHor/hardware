@@ -154,11 +154,35 @@ export const ServiceCalls = () => {
     }
   };
 
+  const getCurrentUserId = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      // Get the user record from the users table using the auth_user_id
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user data:', error);
+        return null;
+      }
+
+      return userData?.id || null;
+    } catch (error) {
+      console.error('Error getting current user ID:', error);
+      return null;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const currentUserId = await getCurrentUserId();
       
       const callData = {
         ...formData,
@@ -167,7 +191,7 @@ export const ServiceCalls = () => {
         engineer_id: formData.engineer_id || null,
         scheduled_date: formData.scheduled_date || null,
         problem_description: formData.problem_description || null,
-        received_by: user?.id,
+        received_by: currentUserId,
         status: 'pending'
       };
 
@@ -195,11 +219,11 @@ export const ServiceCalls = () => {
 
   const handleStatusUpdate = async (callId: string, newStatus: string, engineerId?: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const currentUserId = await getCurrentUserId();
       
       const updateData: any = {
         status: newStatus,
-        updated_by: user?.id
+        updated_by: currentUserId
       };
 
       if (engineerId) {
