@@ -110,7 +110,7 @@ export const Staff = () => {
         .from('users')
         .select(`
           *,
-          designations (name, description, department, level)
+          designations!users_designation_id_fkey (name, description, department, level)
         `)
         .order('name');
 
@@ -142,6 +142,23 @@ export const Staff = () => {
     e.preventDefault();
     
     try {
+      // Get current user to set created_by field
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get current user's data to check permissions
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('id, role')
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'manager')) {
+        throw new Error('Insufficient permissions to add staff');
+      }
+
       const { error } = await supabase
         .from('users')
         .insert([{
@@ -155,6 +172,7 @@ export const Staff = () => {
       fetchStaff();
     } catch (error) {
       console.error('Error adding staff:', error);
+      alert('Error adding staff: ' + (error as Error).message);
     }
   };
 
@@ -164,6 +182,22 @@ export const Staff = () => {
     if (!editingStaff) return;
     
     try {
+      // Get current user to check permissions
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('id, role')
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'manager')) {
+        throw new Error('Insufficient permissions to update staff');
+      }
+
       const { error } = await supabase
         .from('users')
         .update({
@@ -178,6 +212,7 @@ export const Staff = () => {
       fetchStaff();
     } catch (error) {
       console.error('Error updating staff:', error);
+      alert('Error updating staff: ' + (error as Error).message);
     }
   };
 
@@ -185,9 +220,28 @@ export const Staff = () => {
     e.preventDefault();
     
     try {
+      // Get current user to set created_by field
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('id, role')
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (!currentUser || currentUser.role !== 'admin') {
+        throw new Error('Only admins can add designations');
+      }
+
       const { error } = await supabase
         .from('designations')
-        .insert([designationForm]);
+        .insert([{
+          ...designationForm,
+          created_by: currentUser.id
+        }]);
       
       if (error) throw error;
       
@@ -195,6 +249,7 @@ export const Staff = () => {
       fetchDesignations();
     } catch (error) {
       console.error('Error adding designation:', error);
+      alert('Error adding designation: ' + (error as Error).message);
     }
   };
 
@@ -204,6 +259,22 @@ export const Staff = () => {
     if (!editingDesignation) return;
     
     try {
+      // Check permissions
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('role')
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (!currentUser || currentUser.role !== 'admin') {
+        throw new Error('Only admins can update designations');
+      }
+
       const { error } = await supabase
         .from('designations')
         .update(designationForm)
@@ -215,12 +286,29 @@ export const Staff = () => {
       fetchDesignations();
     } catch (error) {
       console.error('Error updating designation:', error);
+      alert('Error updating designation: ' + (error as Error).message);
     }
   };
 
   const handleDeleteDesignation = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this designation?')) {
       try {
+        // Check permissions
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          throw new Error('User not authenticated');
+        }
+
+        const { data: currentUser } = await supabase
+          .from('users')
+          .select('role')
+          .eq('auth_user_id', user.id)
+          .single();
+
+        if (!currentUser || currentUser.role !== 'admin') {
+          throw new Error('Only admins can delete designations');
+        }
+
         const { error } = await supabase
           .from('designations')
           .update({ is_active: false })
@@ -230,6 +318,7 @@ export const Staff = () => {
         fetchDesignations();
       } catch (error) {
         console.error('Error deleting designation:', error);
+        alert('Error deleting designation: ' + (error as Error).message);
       }
     }
   };
@@ -338,6 +427,9 @@ export const Staff = () => {
 
   const departments = [...new Set(designations.map(d => d.department))].filter(Boolean);
 
+  // Check if current user has permission to add/edit staff
+  const canManageStaff = currentUserRole === 'admin' || currentUserRole === 'manager';
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -376,16 +468,30 @@ export const Staff = () => {
                 <span>Manage Designations</span>
               </button>
             )}
-            <button
-              onClick={() => setShowAddStaffModal(true)}
-              className="bg-primary-700 hover:bg-primary-800 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
-            >
-              <Plus className="h-5 w-5" />
-              <span>Add Staff Member</span>
-            </button>
+            {canManageStaff && (
+              <button
+                onClick={() => setShowAddStaffModal(true)}
+                className="bg-primary-700 hover:bg-primary-800 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+              >
+                <Plus className="h-5 w-5" />
+                <span>Add Staff Member</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Permission Notice */}
+      {!canManageStaff && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <Shield className="h-5 w-5 text-yellow-600 mr-2" />
+            <p className="text-yellow-800 text-sm">
+              You have read-only access to staff information. Contact an administrator to add or modify staff members.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -554,12 +660,14 @@ export const Staff = () => {
                     {member.active ? 'Active' : 'Inactive'}
                   </span>
                   <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => handleEditStaff(member)}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </button>
+                    {canManageStaff && (
+                      <button
+                        onClick={() => handleEditStaff(member)}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -580,7 +688,7 @@ export const Staff = () => {
               : 'Get started by adding your first staff member'
             }
           </p>
-          {!searchTerm && roleFilter === 'all' && departmentFilter === 'all' && (
+          {!searchTerm && roleFilter === 'all' && departmentFilter === 'all' && canManageStaff && (
             <button
               onClick={() => setShowAddStaffModal(true)}
               className="bg-primary-700 hover:bg-primary-800 text-white px-4 py-2 rounded-lg inline-flex items-center space-x-2 transition-colors"
@@ -593,7 +701,7 @@ export const Staff = () => {
       )}
 
       {/* Add/Edit Staff Modal */}
-      {showAddStaffModal && (
+      {showAddStaffModal && canManageStaff && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
             <div className="p-6 border-b border-gray-100">
