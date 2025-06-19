@@ -19,9 +19,24 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 // Check if environment variables are properly set
-if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('your-project') || supabaseKey.includes('your-')) {
-  console.error('Supabase environment variables are not properly configured. Please check your .env file.');
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Supabase environment variables are missing. Please check your .env file.');
   throw new Error('Supabase configuration is missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
+}
+
+// Check if environment variables contain placeholder values
+if (supabaseUrl.includes('your-project') || supabaseUrl === 'your_supabase_project_url' || 
+    supabaseKey.includes('your-') || supabaseKey === 'your_supabase_anon_key') {
+  console.error('Supabase environment variables contain placeholder values. Please update your .env file with actual Supabase credentials.');
+  throw new Error('Please update your .env file with actual Supabase project URL and anon key.');
+}
+
+// Validate URL format
+try {
+  new URL(supabaseUrl);
+} catch (error) {
+  console.error('Invalid Supabase URL format:', supabaseUrl);
+  throw new Error('VITE_SUPABASE_URL must be a valid URL. Please check your .env file.');
 }
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
