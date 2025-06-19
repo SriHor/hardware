@@ -27,7 +27,7 @@ interface RecentCall {
   clients: {
     company_name: string;
   };
-  users: {
+  engineer: {
     name: string;
   } | null;
 }
@@ -75,7 +75,7 @@ export const Dashboard = () => {
         .eq('status', 'completed')
         .gte('completed_at', startOfMonth.toISOString());
 
-      // Fetch recent service calls
+      // Fetch recent service calls with explicit relationship specification
       const { data: recentCallsData } = await supabase
         .from('service_calls')
         .select(`
@@ -84,7 +84,7 @@ export const Dashboard = () => {
           status,
           created_at,
           clients (company_name),
-          users (name)
+          engineer:users!service_calls_engineer_id_fkey (name)
         `)
         .order('created_at', { ascending: false })
         .limit(5);
@@ -260,7 +260,7 @@ export const Dashboard = () => {
                       </p>
                       <div className="flex items-center justify-between mt-2">
                         <p className="text-xs text-gray-500">
-                          Engineer: {call.users?.name || 'Unassigned'}
+                          Engineer: {call.engineer?.name || 'Unassigned'}
                         </p>
                         <p className="text-xs text-gray-500">
                           {format(new Date(call.created_at), 'MMM d, yyyy')}
