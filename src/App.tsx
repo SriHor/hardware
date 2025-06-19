@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { createClient } from '@supabase/supabase-js';
 import { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
@@ -10,59 +10,53 @@ import { Inventory } from './pages/Inventory';
 import { Telecalling } from './pages/Telecalling';
 import { Reports } from './pages/Reports';
 import { Login } from './pages/Login';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key';
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-function App() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [session, setSession] = useState(null);
+function AppContent() {
+  const { user, loading } = useAuth();
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setIsLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-700"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-700"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
       </div>
     );
   }
 
   return (
+    <Router>
+      {!user ? (
+        <Login />
+      ) : (
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/clients" element={<Clients />} />
+            <Route path="/service-calls" element={<ServiceCalls />} />
+            <Route path="/staff" element={<Staff />} />
+            <Route path="/inventory" element={<Inventory />} />
+            <Route path="/telecalling" element={<Telecalling />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Layout>
+      )}
+    </Router>
+  );
+}
+
+function App() {
+  return (
     <AuthProvider>
-      <Router>
-        {!session ? (
-          <Login />
-        ) : (
-          <Layout>
-            <Routes>
-              <Route path="/\" element={<Dashboard />} />
-              <Route path="/clients" element={<Clients />} />
-              <Route path="/service-calls" element={<ServiceCalls />} />
-              <Route path="/staff" element={<Staff />} />
-              <Route path="/inventory" element={<Inventory />} />
-              <Route path="/telecalling" element={<Telecalling />} />
-              <Route path="/reports" element={<Reports />} />
-            </Routes>
-          </Layout>
-        )}
-      </Router>
+      <AppContent />
     </AuthProvider>
   );
 }
