@@ -11,6 +11,7 @@ import { Inventory } from './pages/Inventory';
 import { Telecalling } from './pages/Telecalling';
 import { PaymentReminders } from './pages/PaymentReminders';
 import { Reports } from './pages/Reports';
+import { Accounting } from './pages/Accounting';
 import { Login } from './pages/Login';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -71,6 +72,7 @@ function AppContent() {
             <Route path="/telecalling" element={<Telecalling />} />
             <Route path="/reminders" element={<PaymentReminders />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/accounting" element={<Accounting />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>

@@ -12,7 +12,8 @@ import {
   Menu,
   X,
   FileText,
-  Bell
+  Bell,
+  Calculator
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -38,6 +39,7 @@ export const Layout = ({ children }: LayoutProps) => {
     { name: 'Inventory', href: '/inventory', icon: Package },
     { name: 'Telecalling', href: '/telecalling', icon: Phone },
     { name: 'Reminders', href: '/reminders', icon: Bell },
+    { name: 'Accounting', href: '/accounting', icon: Calculator },
     { name: 'Reports', href: '/reports', icon: BarChart3 },
   ];
 
