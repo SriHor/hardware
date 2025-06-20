@@ -16,7 +16,11 @@ import {
   AlertTriangle,
   FileText,
   PieChart,
-  Activity
+  Activity,
+  Phone,
+  Monitor,
+  Code,
+  Globe
 } from 'lucide-react';
 import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfYear, endOfYear } from 'date-fns';
 
@@ -26,12 +30,21 @@ interface ReportData {
   completedCalls: number;
   pendingCalls: number;
   inventoryValue: number;
+  totalLeads: number;
+  convertedLeads: number;
   monthlyCallsData: Array<{ date: string; count: number }>;
   statusDistribution: Array<{ status: string; count: number }>;
   engineerPerformance: Array<{ name: string; completed: number; pending: number; in_progress: number }>;
   clientServiceData: Array<{ client_name: string; total_calls: number; completed: number; pending: number }>;
   dailyServiceData: Array<{ date: string; calls: number; completed: number }>;
   monthlyServiceData: Array<{ month: string; calls: number; completed: number; revenue: number }>;
+  telecallingData: {
+    monthlyLeads: Array<{ month: string; total: number; converted: number; hardware: number; software: number; website: number }>;
+    dailyLeads: Array<{ date: string; total: number; converted: number }>;
+    telecallerPerformance: Array<{ name: string; total: number; converted: number; hardware: number; software: number; website: number }>;
+    statusDistribution: Array<{ status: string; count: number }>;
+    typeDistribution: Array<{ type: string; count: number }>;
+  };
 }
 
 interface ServiceCallReport {
@@ -59,12 +72,21 @@ export const Reports = () => {
     completedCalls: 0,
     pendingCalls: 0,
     inventoryValue: 0,
+    totalLeads: 0,
+    convertedLeads: 0,
     monthlyCallsData: [],
     statusDistribution: [],
     engineerPerformance: [],
     clientServiceData: [],
     dailyServiceData: [],
-    monthlyServiceData: []
+    monthlyServiceData: [],
+    telecallingData: {
+      monthlyLeads: [],
+      dailyLeads: [],
+      telecallerPerformance: [],
+      statusDistribution: [],
+      typeDistribution: []
+    }
   });
   const [serviceCalls, setServiceCalls] = useState<ServiceCallReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,14 +94,17 @@ export const Reports = () => {
   const [reportType, setReportType] = useState('overview');
   const [selectedEngineer, setSelectedEngineer] = useState('all');
   const [selectedClient, setSelectedClient] = useState('all');
+  const [selectedTelecaller, setSelectedTelecaller] = useState('all');
   const [engineers, setEngineers] = useState<Array<{ id: string; name: string }>>([]);
   const [clients, setClients] = useState<Array<{ id: string; company_name: string }>>([]);
+  const [telecallers, setTelecallers] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     fetchReportData();
     fetchEngineers();
     fetchClients();
-  }, [dateRange, selectedEngineer, selectedClient]);
+    fetchTelecallers();
+  }, [dateRange, selectedEngineer, selectedClient, selectedTelecaller]);
 
   const getDateRangeFilter = () => {
     const endDate = new Date();
@@ -138,6 +163,23 @@ export const Reports = () => {
       if (serviceCallsError) throw serviceCallsError;
 
       setServiceCalls(serviceCallsData || []);
+
+      // Fetch telecalling data
+      let telecallingQuery = supabase
+        .from('telecalling_leads')
+        .select(`
+          *,
+          users!telecalling_leads_created_by_fkey (name)
+        `)
+        .gte('lead_generation_date', startDate.toISOString().split('T')[0])
+        .lte('lead_generation_date', endDate.toISOString().split('T')[0]);
+
+      if (selectedTelecaller !== 'all') {
+        telecallingQuery = telecallingQuery.eq('created_by', selectedTelecaller);
+      }
+
+      const { data: telecallingData, error: telecallingError } = await telecallingQuery;
+      if (telecallingError) throw telecallingError;
 
       // Fetch total clients
       const { count: clientCount } = await supabase
@@ -247,18 +289,108 @@ export const Reports = () => {
         ...stats
       })).sort((a, b) => a.month.localeCompare(b.month));
 
+      // Process telecalling data
+      const telecallingLeads = telecallingData || [];
+      const totalLeads = telecallingLeads.length;
+      const convertedLeads = telecallingLeads.filter(lead => lead.status === 'converted').length;
+
+      // Monthly leads data
+      const monthlyLeadsStats = telecallingLeads.reduce((acc, lead) => {
+        const month = format(new Date(lead.lead_generation_date), 'yyyy-MM');
+        if (!acc[month]) {
+          acc[month] = { total: 0, converted: 0, hardware: 0, software: 0, website: 0 };
+        }
+        acc[month].total++;
+        if (lead.status === 'converted') acc[month].converted++;
+        if (lead.lead_type === 'hardware') acc[month].hardware++;
+        if (lead.lead_type === 'software') acc[month].software++;
+        if (lead.lead_type === 'website') acc[month].website++;
+        return acc;
+      }, {} as Record<string, any>);
+
+      const monthlyLeads = Object.entries(monthlyLeadsStats).map(([month, stats]) => ({
+        month,
+        ...stats
+      })).sort((a, b) => a.month.localeCompare(b.month));
+
+      // Daily leads data
+      const dailyLeadsStats = telecallingLeads.reduce((acc, lead) => {
+        const date = format(new Date(lead.lead_generation_date), 'yyyy-MM-dd');
+        if (!acc[date]) {
+          acc[date] = { total: 0, converted: 0 };
+        }
+        acc[date].total++;
+        if (lead.status === 'converted') acc[date].converted++;
+        return acc;
+      }, {} as Record<string, any>);
+
+      const dailyLeads = Object.entries(dailyLeadsStats).map(([date, stats]) => ({
+        date,
+        ...stats
+      })).sort((a, b) => a.date.localeCompare(b.date));
+
+      // Telecaller performance
+      const telecallerStats = telecallingLeads.reduce((acc, lead) => {
+        const telecallerName = lead.users?.name || 'Unknown';
+        if (!acc[telecallerName]) {
+          acc[telecallerName] = { total: 0, converted: 0, hardware: 0, software: 0, website: 0 };
+        }
+        acc[telecallerName].total++;
+        if (lead.status === 'converted') acc[telecallerName].converted++;
+        if (lead.lead_type === 'hardware') acc[telecallerName].hardware++;
+        if (lead.lead_type === 'software') acc[telecallerName].software++;
+        if (lead.lead_type === 'website') acc[telecallerName].website++;
+        return acc;
+      }, {} as Record<string, any>);
+
+      const telecallerPerformance = Object.entries(telecallerStats).map(([name, stats]) => ({
+        name,
+        ...stats
+      }));
+
+      // Status distribution for telecalling
+      const telecallingStatusCounts = telecallingLeads.reduce((acc, lead) => {
+        acc[lead.status] = (acc[lead.status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const telecallingStatusDistribution = Object.entries(telecallingStatusCounts).map(([status, count]) => ({
+        status,
+        count
+      }));
+
+      // Type distribution for telecalling
+      const telecallingTypeCounts = telecallingLeads.reduce((acc, lead) => {
+        acc[lead.lead_type] = (acc[lead.lead_type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const telecallingTypeDistribution = Object.entries(telecallingTypeCounts).map(([type, count]) => ({
+        type,
+        count
+      }));
+
       setReportData({
         totalClients: clientCount || 0,
         totalServiceCalls: serviceCallsData?.length || 0,
         completedCalls: completedCount,
         pendingCalls: pendingCount,
         inventoryValue,
+        totalLeads,
+        convertedLeads,
         monthlyCallsData: [], // Would need more complex processing for chart data
         statusDistribution,
         engineerPerformance,
         clientServiceData,
         dailyServiceData,
-        monthlyServiceData
+        monthlyServiceData,
+        telecallingData: {
+          monthlyLeads,
+          dailyLeads,
+          telecallerPerformance,
+          statusDistribution: telecallingStatusDistribution,
+          typeDistribution: telecallingTypeDistribution
+        }
       });
     } catch (error) {
       console.error('Error fetching report data:', error);
@@ -297,34 +429,93 @@ export const Reports = () => {
     }
   };
 
+  const fetchTelecallers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name')
+        .in('role', ['admin', 'manager', 'telecaller'])
+        .eq('active', true)
+        .order('name');
+
+      if (error) throw error;
+      setTelecallers(data || []);
+    } catch (error) {
+      console.error('Error fetching telecallers:', error);
+    }
+  };
+
   const completionRate = reportData.totalServiceCalls > 0 
     ? ((reportData.completedCalls / reportData.totalServiceCalls) * 100).toFixed(1)
     : '0';
 
+  const conversionRate = reportData.totalLeads > 0
+    ? ((reportData.convertedLeads / reportData.totalLeads) * 100).toFixed(1)
+    : '0';
+
   const exportToCSV = () => {
-    const headers = ['Job ID', 'Client', 'Engineer', 'Date', 'Complaint', 'Status', 'Priority', 'Billing Amount'];
-    const csvData = serviceCalls.map(call => [
-      call.job_id,
-      call.clients?.company_name || 'N/A',
-      call.engineer?.name || 'Unassigned',
-      format(new Date(call.created_at), 'dd/MM/yyyy'),
-      call.nature_of_complaint,
-      call.status,
-      call.priority,
-      call.billing_amount || 0
-    ]);
+    if (reportType === 'telecalling') {
+      // Export telecalling data
+      const headers = ['Company', 'Contact Person', 'Phone', 'Email', 'Type', 'Status', 'Generation Date', 'Telecaller'];
+      const csvData = reportData.telecallingData.telecallerPerformance.map(telecaller => [
+        telecaller.name,
+        telecaller.total,
+        telecaller.converted,
+        telecaller.hardware,
+        telecaller.software,
+        telecaller.website
+      ]);
 
-    const csvContent = [headers, ...csvData]
-      .map(row => row.map(field => `"${field}"`).join(','))
-      .join('\n');
+      const csvContent = [['Telecaller', 'Total Leads', 'Converted', 'Hardware', 'Software', 'Website'], ...csvData]
+        .map(row => row.map(field => `"${field}"`).join(','))
+        .join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `service-calls-report-${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `telecalling-report-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } else {
+      // Export service calls data
+      const headers = ['Job ID', 'Client', 'Engineer', 'Date', 'Complaint', 'Status', 'Priority', 'Billing Amount'];
+      const csvData = serviceCalls.map(call => [
+        call.job_id,
+        call.clients?.company_name || 'N/A',
+        call.engineer?.name || 'Unassigned',
+        format(new Date(call.created_at), 'dd/MM/yyyy'),
+        call.nature_of_complaint,
+        call.status,
+        call.priority,
+        call.billing_amount || 0
+      ]);
+
+      const csvContent = [headers, ...csvData]
+        .map(row => row.map(field => `"${field}"`).join(','))
+        .join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `service-calls-report-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    }
+  };
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'hardware':
+        return <Monitor className="h-4 w-4" />;
+      case 'software':
+        return <Code className="h-4 w-4" />;
+      case 'website':
+        return <Globe className="h-4 w-4" />;
+      default:
+        return <Monitor className="h-4 w-4" />;
+    }
   };
 
   if (loading) {
@@ -356,7 +547,7 @@ export const Reports = () => {
               Service Reports & Analytics
             </h1>
             <p className="text-gray-600 mt-1">
-              Comprehensive insights into your hardware service operations
+              Comprehensive insights into your hardware service and telecalling operations
             </p>
           </div>
           <div className="flex items-center space-x-4">
@@ -402,42 +593,63 @@ export const Reports = () => {
                 <option value="client">Client Analysis</option>
                 <option value="daily">Daily Reports</option>
                 <option value="monthly">Monthly Reports</option>
+                <option value="telecalling">Telecalling Reports</option>
               </select>
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Engineer</label>
-              <select
-                className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                value={selectedEngineer}
-                onChange={(e) => setSelectedEngineer(e.target.value)}
-              >
-                <option value="all">All Engineers</option>
-                {engineers.map(engineer => (
-                  <option key={engineer.id} value={engineer.id}>{engineer.name}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
-              <select
-                className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                value={selectedClient}
-                onChange={(e) => setSelectedClient(e.target.value)}
-              >
-                <option value="all">All Clients</option>
-                {clients.map(client => (
-                  <option key={client.id} value={client.id}>{client.company_name}</option>
-                ))}
-              </select>
-            </div>
+            {reportType !== 'telecalling' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Engineer</label>
+                  <select
+                    className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    value={selectedEngineer}
+                    onChange={(e) => setSelectedEngineer(e.target.value)}
+                  >
+                    <option value="all">All Engineers</option>
+                    {engineers.map(engineer => (
+                      <option key={engineer.id} value={engineer.id}>{engineer.name}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
+                  <select
+                    className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    value={selectedClient}
+                    onChange={(e) => setSelectedClient(e.target.value)}
+                  >
+                    <option value="all">All Clients</option>
+                    {clients.map(client => (
+                      <option key={client.id} value={client.id}>{client.company_name}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+
+            {reportType === 'telecalling' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Telecaller</label>
+                <select
+                  className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  value={selectedTelecaller}
+                  onChange={(e) => setSelectedTelecaller(e.target.value)}
+                >
+                  <option value="all">All Telecallers</option>
+                  {telecallers.map(telecaller => (
+                    <option key={telecaller.id} value={telecaller.id}>{telecaller.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
@@ -493,9 +705,259 @@ export const Reports = () => {
             </div>
           </div>
         </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Leads</p>
+              <p className="text-3xl font-bold text-gray-900 mt-2">{reportData.totalLeads}</p>
+              <p className="text-sm text-blue-600 mt-1">Generated</p>
+            </div>
+            <div className="bg-blue-100 p-3 rounded-lg">
+              <Phone className="h-8 w-8 text-blue-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Conversion Rate</p>
+              <p className="text-3xl font-bold text-gray-900 mt-2">{conversionRate}%</p>
+              <p className="text-sm text-green-600 mt-1">
+                {reportData.convertedLeads} converted
+              </p>
+            </div>
+            <div className="bg-green-100 p-3 rounded-lg">
+              <CheckCircle className="h-8 w-8 text-green-600" />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Report Content Based on Type */}
+      {reportType === 'telecalling' && (
+        <div className="space-y-6">
+          {/* Telecaller Performance */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900">Telecaller Performance Report</h3>
+              <p className="text-sm text-gray-600 mt-1">Leads generated and converted by each telecaller</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telecaller</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Leads</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Converted</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hardware</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Software</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Website</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Conversion Rate</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {reportData.telecallingData.telecallerPerformance.map((telecaller) => {
+                    const conversionRate = telecaller.total > 0 ? ((telecaller.converted / telecaller.total) * 100).toFixed(1) : '0';
+                    
+                    return (
+                      <tr key={telecaller.name}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                              <span className="text-xs font-medium text-primary-700">
+                                {telecaller.name.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="ml-3">
+                              <div className="text-sm font-medium text-gray-900">{telecaller.name}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                          {telecaller.total}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                          {telecaller.converted}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-medium">
+                          {telecaller.hardware}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-purple-600 font-medium">
+                          {telecaller.software}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                          {telecaller.website}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                              <div 
+                                className="bg-green-500 h-2 rounded-full" 
+                                style={{ width: `${conversionRate}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-sm text-gray-600">{conversionRate}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Lead Type and Status Distribution */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="p-6 border-b border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900">Lead Type Distribution</h3>
+                <p className="text-sm text-gray-600 mt-1">Breakdown by service type</p>
+              </div>
+              <div className="p-6">
+                {reportData.telecallingData.typeDistribution.length > 0 ? (
+                  <div className="space-y-4">
+                    {reportData.telecallingData.typeDistribution.map((item) => {
+                      const percentage = reportData.totalLeads > 0 
+                        ? (item.count / reportData.totalLeads * 100).toFixed(1)
+                        : '0';
+                      
+                      return (
+                        <div key={item.type} className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            {getTypeIcon(item.type)}
+                            <span className="text-sm font-medium text-gray-900 capitalize">
+                              {item.type}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm text-gray-600">{item.count}</span>
+                            <span className="text-xs text-gray-500">({percentage}%)</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <PieChart className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500">No data available</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="p-6 border-b border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900">Lead Status Distribution</h3>
+                <p className="text-sm text-gray-600 mt-1">Current status of all leads</p>
+              </div>
+              <div className="p-6">
+                {reportData.telecallingData.statusDistribution.length > 0 ? (
+                  <div className="space-y-4">
+                    {reportData.telecallingData.statusDistribution.map((item) => {
+                      const percentage = reportData.totalLeads > 0 
+                        ? (item.count / reportData.totalLeads * 100).toFixed(1)
+                        : '0';
+                      
+                      return (
+                        <div key={item.status} className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-3 h-3 rounded-full ${
+                              item.status === 'converted' ? 'bg-green-500' :
+                              item.status === 'follow-up' ? 'bg-yellow-500' :
+                              item.status === 'new' ? 'bg-blue-500' :
+                              'bg-red-500'
+                            }`}></div>
+                            <span className="text-sm font-medium text-gray-900 capitalize">
+                              {item.status.replace('-', ' ')}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm text-gray-600">{item.count}</span>
+                            <span className="text-xs text-gray-500">({percentage}%)</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <PieChart className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500">No data available</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Monthly Leads Report */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900">Monthly Leads Report</h3>
+              <p className="text-sm text-gray-600 mt-1">Month-wise lead generation and conversion</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Month</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Leads</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Converted</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hardware</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Software</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Website</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Conversion Rate</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {reportData.telecallingData.monthlyLeads.map((month) => {
+                    const conversionRate = month.total > 0 ? ((month.converted / month.total) * 100).toFixed(1) : '0';
+                    
+                    return (
+                      <tr key={month.month}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {format(new Date(month.month + '-01'), 'MMM yyyy')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {month.total}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                          {month.converted}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600">
+                          {month.hardware}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-purple-600">
+                          {month.software}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                          {month.website}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                              <div 
+                                className="bg-green-500 h-2 rounded-full" 
+                                style={{ width: `${conversionRate}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-sm text-gray-600">{conversionRate}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Other report types remain the same as before */}
       {reportType === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Service Call Status Distribution */}
