@@ -22,7 +22,8 @@ import {
   MessageSquare,
   Timer,
   MapPin,
-  Settings
+  Settings,
+  Trash2
 } from 'lucide-react';
 import { format, differenceInHours, differenceInMinutes } from 'date-fns';
 
@@ -84,6 +85,7 @@ export const ServiceCalls = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCall, setEditingCall] = useState<ServiceCall | null>(null);
   const [viewingCall, setViewingCall] = useState<ServiceCall | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string>('');
   const [formData, setFormData] = useState({
     client_id: '',
     call_date: new Date().toISOString().split('T')[0],
@@ -101,7 +103,27 @@ export const ServiceCalls = () => {
     fetchServiceCalls();
     fetchClients();
     fetchEngineers();
+    getCurrentUserRole();
   }, []);
+
+  const getCurrentUserRole = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('role')
+          .eq('auth_user_id', user.id)
+          .single();
+        
+        if (userData) {
+          setCurrentUserRole(userData.role);
+        }
+      }
+    } catch (error) {
+      console.error('Error getting current user role:', error);
+    }
+  };
 
   const fetchServiceCalls = async () => {
     try {
@@ -250,6 +272,23 @@ export const ServiceCalls = () => {
     }
   };
 
+  const handleDelete = async (callId: string) => {
+    if (window.confirm('Are you sure you want to delete this service call? This action cannot be undone.')) {
+      try {
+        const { error } = await supabase
+          .from('service_calls')
+          .delete()
+          .eq('id', callId);
+        
+        if (error) throw error;
+        fetchServiceCalls();
+      } catch (error) {
+        console.error('Error deleting service call:', error);
+        alert('Error deleting service call: ' + (error as Error).message);
+      }
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       client_id: '',
@@ -341,6 +380,9 @@ export const ServiceCalls = () => {
     
     return matchesSearch && matchesStatus && matchesPriority;
   });
+
+  // Check if current user can delete service calls (admin or manager)
+  const canDeleteServiceCalls = currentUserRole === 'admin' || currentUserRole === 'manager';
 
   if (loading) {
     return (
@@ -639,6 +681,16 @@ export const ServiceCalls = () => {
                         className="bg-green-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-700 transition-colors"
                       >
                         Mark Complete
+                      </button>
+                    )}
+
+                    {canDeleteServiceCalls && (
+                      <button
+                        onClick={() => handleDelete(call.id)}
+                        className="bg-red-100 text-red-700 px-3 py-1 rounded-lg text-sm hover:bg-red-200 transition-colors flex items-center space-x-1"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>Delete</span>
                       </button>
                     )}
                   </div>
