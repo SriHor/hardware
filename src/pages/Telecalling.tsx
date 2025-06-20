@@ -15,7 +15,11 @@ import {
   Edit,
   Trash2,
   Eye,
-  Mail
+  Mail,
+  Monitor,
+  Code,
+  Globe,
+  BarChart3
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -29,6 +33,8 @@ interface TelecallingLead {
   status: string;
   notes: string | null;
   follow_up_date: string | null;
+  lead_type: string;
+  lead_generation_date: string;
   created_at: string;
   created_by: string;
   users: {
@@ -36,12 +42,21 @@ interface TelecallingLead {
   } | null;
 }
 
+interface Telecaller {
+  id: string;
+  name: string;
+}
+
 export const Telecalling = () => {
   const [leads, setLeads] = useState<TelecallingLead[]>([]);
+  const [telecallers, setTelecallers] = useState<Telecaller[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [telecallerFilter, setTelecallerFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showReportsModal, setShowReportsModal] = useState(false);
   const [editingLead, setEditingLead] = useState<TelecallingLead | null>(null);
   const [viewingLead, setViewingLead] = useState<TelecallingLead | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string>('');
@@ -53,12 +68,15 @@ export const Telecalling = () => {
     email: '',
     location: '',
     status: 'new',
+    lead_type: 'hardware',
+    lead_generation_date: new Date().toISOString().split('T')[0],
     notes: '',
     follow_up_date: ''
   });
 
   useEffect(() => {
     fetchLeads();
+    fetchTelecallers();
     getCurrentUserRole();
   }, []);
 
@@ -89,7 +107,7 @@ export const Telecalling = () => {
           *,
           users!telecalling_leads_created_by_fkey (name)
         `)
-        .order('created_at', { ascending: false });
+        .order('lead_generation_date', { ascending: false });
 
       if (error) throw error;
       setLeads(data || []);
@@ -97,6 +115,22 @@ export const Telecalling = () => {
       console.error('Error fetching telecalling leads:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTelecallers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name')
+        .in('role', ['admin', 'manager', 'telecaller'])
+        .eq('active', true)
+        .order('name');
+
+      if (error) throw error;
+      setTelecallers(data || []);
+    } catch (error) {
+      console.error('Error fetching telecallers:', error);
     }
   };
 
@@ -169,6 +203,8 @@ export const Telecalling = () => {
       email: lead.email || '',
       location: lead.location || '',
       status: lead.status,
+      lead_type: lead.lead_type || 'hardware',
+      lead_generation_date: lead.lead_generation_date || new Date().toISOString().split('T')[0],
       notes: lead.notes || '',
       follow_up_date: lead.follow_up_date || ''
     });
@@ -200,6 +236,8 @@ export const Telecalling = () => {
       email: '',
       location: '',
       status: 'new',
+      lead_type: 'hardware',
+      lead_generation_date: new Date().toISOString().split('T')[0],
       notes: '',
       follow_up_date: ''
     });
@@ -237,17 +275,46 @@ export const Telecalling = () => {
     }
   };
 
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'hardware':
+        return <Monitor className="h-4 w-4" />;
+      case 'software':
+        return <Code className="h-4 w-4" />;
+      case 'website':
+        return <Globe className="h-4 w-4" />;
+      default:
+        return <Monitor className="h-4 w-4" />;
+    }
+  };
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'hardware':
+        return 'bg-blue-100 text-blue-800';
+      case 'software':
+        return 'bg-purple-100 text-purple-800';
+      case 'website':
+        return 'bg-green-100 text-green-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = 
       lead.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead.contact_person.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead.contact_number.includes(searchTerm) ||
       lead.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.location?.toLowerCase().includes(searchTerm.toLowerCase());
+      lead.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lead.users?.name.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
+    const matchesType = typeFilter === 'all' || lead.lead_type === typeFilter;
+    const matchesTelecaller = telecallerFilter === 'all' || lead.created_by === telecallerFilter;
     
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStatus && matchesType && matchesTelecaller;
   });
 
   const stats = {
@@ -256,6 +323,9 @@ export const Telecalling = () => {
     followUp: leads.filter(lead => lead.status === 'follow-up').length,
     converted: leads.filter(lead => lead.status === 'converted').length,
     rejected: leads.filter(lead => lead.status === 'rejected').length,
+    hardware: leads.filter(lead => lead.lead_type === 'hardware').length,
+    software: leads.filter(lead => lead.lead_type === 'software').length,
+    website: leads.filter(lead => lead.lead_type === 'website').length,
   };
 
   // Check if current user can manage telecalling (admin, manager, telecaller)
@@ -286,18 +356,27 @@ export const Telecalling = () => {
               Telecalling Management
             </h1>
             <p className="text-gray-600 mt-1">
-              Track and manage your sales leads and follow-ups
+              Track and manage your sales leads with comprehensive reporting
             </p>
           </div>
-          {canManageTelecalling && (
-            <button 
-              onClick={() => setShowAddModal(true)}
-              className="bg-primary-700 hover:bg-primary-800 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setShowReportsModal(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
             >
-              <Plus className="h-5 w-5" />
-              <span>Add Lead</span>
+              <BarChart3 className="h-5 w-5" />
+              <span>Reports</span>
             </button>
-          )}
+            {canManageTelecalling && (
+              <button 
+                onClick={() => setShowAddModal(true)}
+                className="bg-primary-700 hover:bg-primary-800 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+              >
+                <Plus className="h-5 w-5" />
+                <span>Add Lead</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -314,35 +393,53 @@ export const Telecalling = () => {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+        <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
           <div className="text-center">
-            <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            <p className="text-sm text-gray-600">Total Leads</p>
+            <p className="text-xl font-bold text-gray-900">{stats.total}</p>
+            <p className="text-xs text-gray-600">Total</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
           <div className="text-center">
-            <p className="text-2xl font-bold text-blue-600">{stats.new}</p>
-            <p className="text-sm text-gray-600">New</p>
+            <p className="text-xl font-bold text-blue-600">{stats.new}</p>
+            <p className="text-xs text-gray-600">New</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
           <div className="text-center">
-            <p className="text-2xl font-bold text-yellow-600">{stats.followUp}</p>
-            <p className="text-sm text-gray-600">Follow-up</p>
+            <p className="text-xl font-bold text-yellow-600">{stats.followUp}</p>
+            <p className="text-xs text-gray-600">Follow-up</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
           <div className="text-center">
-            <p className="text-2xl font-bold text-green-600">{stats.converted}</p>
-            <p className="text-sm text-gray-600">Converted</p>
+            <p className="text-xl font-bold text-green-600">{stats.converted}</p>
+            <p className="text-xs text-gray-600">Converted</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
           <div className="text-center">
-            <p className="text-2xl font-bold text-red-600">{stats.rejected}</p>
-            <p className="text-sm text-gray-600">Rejected</p>
+            <p className="text-xl font-bold text-red-600">{stats.rejected}</p>
+            <p className="text-xs text-gray-600">Rejected</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+          <div className="text-center">
+            <p className="text-xl font-bold text-blue-600">{stats.hardware}</p>
+            <p className="text-xs text-gray-600">Hardware</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+          <div className="text-center">
+            <p className="text-xl font-bold text-purple-600">{stats.software}</p>
+            <p className="text-xs text-gray-600">Software</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+          <div className="text-center">
+            <p className="text-xl font-bold text-green-600">{stats.website}</p>
+            <p className="text-xs text-gray-600">Website</p>
           </div>
         </div>
       </div>
@@ -354,7 +451,7 @@ export const Telecalling = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
             <input
               type="text"
-              placeholder="Search leads by company, contact, phone, email, or location..."
+              placeholder="Search leads by company, contact, phone, email, location, or telecaller..."
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -376,6 +473,28 @@ export const Telecalling = () => {
                 <option value="rejected">Rejected</option>
               </select>
             </div>
+            
+            <select
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+            >
+              <option value="all">All Types</option>
+              <option value="hardware">Hardware</option>
+              <option value="software">Software</option>
+              <option value="website">Website</option>
+            </select>
+
+            <select
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              value={telecallerFilter}
+              onChange={(e) => setTelecallerFilter(e.target.value)}
+            >
+              <option value="all">All Telecallers</option>
+              {telecallers.map(telecaller => (
+                <option key={telecaller.id} value={telecaller.id}>{telecaller.name}</option>
+              ))}
+            </select>
           </div>
           
           <div className="text-sm text-gray-500">
@@ -423,7 +542,7 @@ export const Telecalling = () => {
                   <div className="flex items-center space-x-4 text-sm text-gray-500">
                     <div className="flex items-center space-x-1">
                       <Calendar className="h-4 w-4" />
-                      <span>Created: {format(new Date(lead.created_at), 'MMM d, yyyy')}</span>
+                      <span>Generated: {format(new Date(lead.lead_generation_date), 'MMM d, yyyy')}</span>
                     </div>
                     {lead.follow_up_date && (
                       <div className="flex items-center space-x-1">
@@ -447,11 +566,19 @@ export const Telecalling = () => {
                 </div>
                 
                 <div className="flex flex-col items-end space-y-2">
-                  <div className="flex items-center space-x-1">
-                    {getStatusIcon(lead.status)}
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(lead.status)}`}>
-                      {lead.status}
-                    </span>
+                  <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
+                      {getStatusIcon(lead.status)}
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(lead.status)}`}>
+                        {lead.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      {getTypeIcon(lead.lead_type)}
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getTypeColor(lead.lead_type)}`}>
+                        {lead.lead_type}
+                      </span>
+                    </div>
                   </div>
                   
                   {canManageTelecalling && (
@@ -490,15 +617,15 @@ export const Telecalling = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
           <Phone className="h-16 w-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">
-            {searchTerm || statusFilter !== 'all' ? 'No leads found' : 'No leads yet'}
+            {searchTerm || statusFilter !== 'all' || typeFilter !== 'all' || telecallerFilter !== 'all' ? 'No leads found' : 'No leads yet'}
           </h3>
           <p className="text-gray-600 mb-6">
-            {searchTerm || statusFilter !== 'all'
+            {searchTerm || statusFilter !== 'all' || typeFilter !== 'all' || telecallerFilter !== 'all'
               ? 'Try adjusting your search terms or filters'
               : 'Get started by adding your first lead'
             }
           </p>
-          {!searchTerm && statusFilter === 'all' && canManageTelecalling && (
+          {!searchTerm && statusFilter === 'all' && typeFilter === 'all' && telecallerFilter === 'all' && canManageTelecalling && (
             <button 
               onClick={() => setShowAddModal(true)}
               className="bg-primary-700 hover:bg-primary-800 text-white px-4 py-2 rounded-lg inline-flex items-center space-x-2 transition-colors"
@@ -513,7 +640,7 @@ export const Telecalling = () => {
       {/* Add/Edit Lead Modal */}
       {showAddModal && canManageTelecalling && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">
                 {editingLead ? 'Edit Lead' : 'Add New Lead'}
@@ -587,6 +714,35 @@ export const Telecalling = () => {
                     value={formData.location}
                     onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                     placeholder="City or location"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Lead Type *
+                  </label>
+                  <select
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    value={formData.lead_type}
+                    onChange={(e) => setFormData({ ...formData, lead_type: e.target.value })}
+                  >
+                    <option value="hardware">Hardware</option>
+                    <option value="software">Software</option>
+                    <option value="website">Website Designing</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Lead Generation Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    value={formData.lead_generation_date}
+                    onChange={(e) => setFormData({ ...formData, lead_generation_date: e.target.value })}
                   />
                 </div>
                 
@@ -700,15 +856,31 @@ export const Telecalling = () => {
                   <p className="text-gray-900">{viewingLead.location}</p>
                 </div>
               )}
-              
-              <div>
-                <label className="text-sm font-medium text-gray-500">Status</label>
-                <div className="mt-1">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(viewingLead.status)}`}>
-                    {getStatusIcon(viewingLead.status)}
-                    <span className="ml-1">{viewingLead.status}</span>
-                  </span>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Lead Type</label>
+                  <div className="mt-1">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getTypeColor(viewingLead.lead_type)}`}>
+                      {getTypeIcon(viewingLead.lead_type)}
+                      <span className="ml-1">{viewingLead.lead_type}</span>
+                    </span>
+                  </div>
                 </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Status</label>
+                  <div className="mt-1">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(viewingLead.status)}`}>
+                      {getStatusIcon(viewingLead.status)}
+                      <span className="ml-1">{viewingLead.status}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-500">Lead Generation Date</label>
+                <p className="text-gray-900">{format(new Date(viewingLead.lead_generation_date), 'dd/MM/yyyy')}</p>
               </div>
               
               {viewingLead.follow_up_date && (
@@ -732,7 +904,7 @@ export const Telecalling = () => {
                 </div>
                 {viewingLead.users && (
                   <div>
-                    <label className="text-sm font-medium text-gray-500">Created By</label>
+                    <label className="text-sm font-medium text-gray-500">Telecaller</label>
                     <p className="text-gray-900">{viewingLead.users.name}</p>
                   </div>
                 )}
