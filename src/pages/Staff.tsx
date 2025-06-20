@@ -910,7 +910,7 @@ export const Staff = () => {
                       <div><span className="font-medium">Phone:</span> {selectedEmployee.phone_number || 'Not provided'}</div>
                       <div><span className="font-medium">Role:</span> {selectedEmployee.role}</div>
                       <div><span className="font-medium">Designation:</span> {selectedEmployee.designations?.name || 'Not assigned'}</div>
-                      <div><span className="font-medium">Joining Date:</span> {selectedEmployee.joining_date ? format(new Date(selectedEmployee.joining_date), 'dd/MM/yyyy') : 'Not provided'}</div>
+                      <div><span className="font-medium">Joining Date:</span> {selectedEmployee.joining_date ? format(new Date(selectedEmployee.joining_date), 'dd/MM/yyyy') : \'Not provided'}</div>
                       <div><span className="font-medium">Status:</span> {selectedEmployee.active ? 'Active' : 'Inactive'}</div>
                     </div>
                   </div>
