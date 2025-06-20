@@ -4,7 +4,8 @@
 
 @layer base {
   :root {
-    --color-primary: 29 78 216;
+    --color-primary: 14 165 233; /* sky-500 */
+    --color-secondary: 249 115 22; /* orange-500 */
   }
   
   body {
@@ -32,36 +33,36 @@
   }
 }
 
-.bg-primary-50 { background-color: rgb(var(--color-primary) / 0.05); }
-.bg-primary-100 { background-color: rgb(var(--color-primary) / 0.1); }
-.bg-primary-200 { background-color: rgb(var(--color-primary) / 0.2); }
-.bg-primary-300 { background-color: rgb(var(--color-primary) / 0.3); }
-.bg-primary-400 { background-color: rgb(var(--color-primary) / 0.4); }
-.bg-primary-500 { background-color: rgb(var(--color-primary) / 0.5); }
-.bg-primary-600 { background-color: rgb(var(--color-primary) / 0.6); }
-.bg-primary-700 { background-color: rgb(var(--color-primary) / 0.7); }
-.bg-primary-800 { background-color: rgb(var(--color-primary) / 0.8); }
-.bg-primary-900 { background-color: rgb(var(--color-primary) / 0.9); }
-.bg-primary-950 { background-color: rgb(var(--color-primary) / 0.95); }
+.bg-primary-50 { background-color: rgb(240 249 255); } /* sky-50 */
+.bg-primary-100 { background-color: rgb(224 242 254); } /* sky-100 */
+.bg-primary-200 { background-color: rgb(186 230 253); } /* sky-200 */
+.bg-primary-300 { background-color: rgb(125 211 252); } /* sky-300 */
+.bg-primary-400 { background-color: rgb(56 189 248); } /* sky-400 */
+.bg-primary-500 { background-color: rgb(14 165 233); } /* sky-500 */
+.bg-primary-600 { background-color: rgb(2 132 199); } /* sky-600 */
+.bg-primary-700 { background-color: rgb(3 105 161); } /* sky-700 */
+.bg-primary-800 { background-color: rgb(7 89 133); } /* sky-800 */
+.bg-primary-900 { background-color: rgb(12 74 110); } /* sky-900 */
+.bg-primary-950 { background-color: rgb(8 47 73); } /* sky-950 */
 
-.text-primary-50 { color: rgb(var(--color-primary) / 0.05); }
-.text-primary-100 { color: rgb(var(--color-primary) / 0.1); }
-.text-primary-200 { color: rgb(var(--color-primary) / 0.2); }
-.text-primary-300 { color: rgb(var(--color-primary) / 0.3); }
-.text-primary-400 { color: rgb(var(--color-primary) / 0.4); }
-.text-primary-500 { color: rgb(var(--color-primary) / 0.5); }
-.text-primary-600 { color: rgb(var(--color-primary) / 0.6); }
-.text-primary-700 { color: rgb(var(--color-primary) / 0.7); }
-.text-primary-800 { color: rgb(var(--color-primary) / 0.8); }
-.text-primary-900 { color: rgb(var(--color-primary) / 0.9); }
-.text-primary-950 { color: rgb(var(--color-primary) / 0.95); }
+.text-primary-50 { color: rgb(240 249 255); } /* sky-50 */
+.text-primary-100 { color: rgb(224 242 254); } /* sky-100 */
+.text-primary-200 { color: rgb(186 230 253); } /* sky-200 */
+.text-primary-300 { color: rgb(125 211 252); } /* sky-300 */
+.text-primary-400 { color: rgb(56 189 248); } /* sky-400 */
+.text-primary-500 { color: rgb(14 165 233); } /* sky-500 */
+.text-primary-600 { color: rgb(2 132 199); } /* sky-600 */
+.text-primary-700 { color: rgb(3 105 161); } /* sky-700 */
+.text-primary-800 { color: rgb(7 89 133); } /* sky-800 */
+.text-primary-900 { color: rgb(12 74 110); } /* sky-900 */
+.text-primary-950 { color: rgb(8 47 73); } /* sky-950 */
 
-.border-primary-500 { border-color: rgb(var(--color-primary) / 0.5); }
-.ring-primary-500 { --tw-ring-color: rgb(var(--color-primary) / 0.5); }
+.border-primary-500 { border-color: rgb(14 165 233); } /* sky-500 */
+.ring-primary-500 { --tw-ring-color: rgb(14 165 233); } /* sky-500 */
 
 /* Custom gradient for sidebar */
 .sidebar-gradient {
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  background: linear-gradient(180deg, #075985 0%, #0c4a6e 100%); /* sky-800 to sky-900 */
 }
 
 /* Smooth transitions for all interactive elements */
@@ -73,7 +74,7 @@
 
 /* Enhanced focus styles */
 .focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+  @apply focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2;
 }
 
 /* Custom scrollbar */
@@ -92,4 +93,22 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Light blue and orange theme gradients */
+.gradient-primary {
+  background: linear-gradient(135deg, #0ea5e9 0%, #f97316 100%);
+}
+
+.gradient-light {
+  background: linear-gradient(135deg, #e0f2fe 0%, #fed7aa 100%);
+}
+
+/* Button styles with new theme */
+.btn-primary {
+  @apply bg-gradient-to-r from-sky-600 to-orange-500 hover:from-sky-700 hover:to-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200;
+}
+
+.btn-secondary {
+  @apply bg-gradient-to-r from-orange-500 to-sky-600 hover:from-orange-600 hover:to-sky-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200;
 }
